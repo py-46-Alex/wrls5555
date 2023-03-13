@@ -1,0 +1,1 @@
+https://alex-podrabinovich.medium.com/docker-для-django-проекта-27c73646add8

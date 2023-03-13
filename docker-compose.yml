@@ -1,0 +1,90 @@
+version: '3.8'
+
+networks:
+  backend: 
+# 
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:
+# 
+services:
+  db:
+    container_name: 'paga_container'
+    image: postgres:13.0-alpine
+    environment:
+      POSTGRES_USER: "admin1"
+      POSTGRES_PASSWORD: "admin1pwd"
+      POSTGRES_DB: "new_db"
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    volumes:
+      - .:/docker-entrypoint-initdb.d # подхватит файл и создаст любую базу с файлами сам файл на скюлЬ
+      - ./logs:/var/log
+      - postgres_data:/var/lib/postgresql/data/
+    networks:
+      - backend
+    hostname: db   
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin1 -d new_db"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+# 
+  pg_admin:
+    depends_on:
+      - db
+    container_name: 'pgadmin_containerr'
+    image: dpage/pgadmin4:5.7
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "admin@yandex.ru"
+      PGADMIN_DEFAULT_PASSWORD: "admin1pwd"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+     - "5055:80"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: '1G'
+    networks:
+      - backend 
+# 
+  web:
+    container_name: 'app_container'
+    depends_on:
+      - db
+      - pg_admin
+    build: ./app
+    command: python manage.py runserver 0.0.0.0:8000
+    # command: bash -c "python3 manage.py migrate && gunicorn stocks_products.wsgi:application --bind 0.0.0.0:8000 "
+    # command: gunicorn stocks_products.wsgi:application --bind 0.0.0.0:8000
+    # command: python manage.py migrate && gunicorn stocks_products.wsgi:application --bind 0.0.0.0:8000
+    # command: gunicorn stocks_products.wsgi:application --bind 0.0.0.0:8000
+    # command: bash -c "python3 manage.py migrate && python3 manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - static_volume:/home/app/web/staticfiles
+      - media_volume:/home/app/web/mediafiles
+    ports:
+      - 8000:8000
+    restart: unless-stopped
+    env_file:
+      - ./.env.dev
+    networks:
+      - backend
+    # command: gunicorn stocks_products.wsgi:application --bind 0.0.0.0:8000
+    # command: bash -c "python3 manage.py migrate && python3 manage.py collectstatic && gunicorn stocks_products.wsgi:application --bind 0.0.0.0:8000"
+    # command: bash -c "python manage.py migrate && python manage.py collectstatic && gunicorn stocks_products.wsgi:application --bind 0.0.0.0:8000"
+# 
+  nginx:
+    build: ./nginx
+    restart: unless-stopped
+    volumes:
+      - static_volume:/home/app/web/staticfiles
+      - media_volume:/home/app/web/mediafiles
+    ports:
+      - 1337:80
+    depends_on:
+      - web
